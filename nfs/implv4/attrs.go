@@ -519,7 +519,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 	for i := 0; i <= maxId; i++ {
 		if on, found := idx[i]; found && on {
 			attrName, _ := GetAttrNameById(i)
-			fmt.Printf(" - attr: %s\n", attrName)
+			log.Debugf(" - attr: %s", attrName)
 
 			switch i {
 			case A_supported_attrs:
@@ -528,7 +528,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.SupportedAttrs = bm4
-				fmt.Printf("   value: %v\n", bm4)
+				log.Debugf("   value: %v", bm4)
 
 			case A_type:
 				v := uint32(0)
@@ -536,7 +536,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Type = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_fh_expire_type:
 				v := uint32(0)
@@ -544,7 +544,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.FhExpireType = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_change:
 				v := uint64(0)
@@ -552,7 +552,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Change = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_size:
 				v := uint64(0)
@@ -560,7 +560,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Size = &v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_link_support:
 				v := false
@@ -568,7 +568,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.LinkSupport = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_symlink_support:
 				v := false
@@ -576,7 +576,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.SymlinkSupport = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_named_attr:
 				v := false
@@ -584,7 +584,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.NamedAttr = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_fsid:
 				v := nfs.Fsid4{}
@@ -592,7 +592,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Fsid = &v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_unique_handles:
 				v := false
@@ -600,7 +600,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.UniqueHandles = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_lease_time:
 				v := uint32(0)
@@ -608,7 +608,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.LeaseTime = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_rdattr_error:
 				v := uint32(0)
@@ -616,7 +616,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.RdattrError = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_filehandle:
 				v := []byte{}
@@ -624,7 +624,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.FileHandle = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_fileid:
 				v := uint64(0)
@@ -632,7 +632,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.FileId = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_mode: // v4.1
 				v := uint32(0)
@@ -640,7 +640,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Mode = &v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_numlinks:
 				v := uint32(0)
@@ -648,7 +648,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.NumLinks = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_owner:
 				v := ""
@@ -656,7 +656,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Owner = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_owner_group:
 				v := ""
@@ -664,7 +664,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.OwnerGroup = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_rawdev:
 				v := nfs.Specdata4{}
@@ -672,7 +672,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.Rawdev = &v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_space_used:
 				v := uint64(0)
@@ -680,7 +680,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.SpaceUsed = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_time_access, A_time_metadata, A_time_modify:
 				v := nfs.NfsTime4{}
@@ -698,7 +698,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					decAttr.TimeModify = &v
 
 				}
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_mounted_on_fileid:
 				v := uint64(0)
@@ -706,7 +706,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.MountedOnFileId = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 
 			case A_suppattr_exclcreat: // v4.1
 				v := []uint32{}
@@ -714,7 +714,7 @@ func decodeFAttrs4(attr *nfs.FAttr4) (*Attr, error) {
 					return nil, err
 				}
 				decAttr.SuppAttrExclCreat = v
-				fmt.Printf("   value: %v\n", v)
+				log.Debugf("   value: %v", v)
 			}
 		}
 	}
