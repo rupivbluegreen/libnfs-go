@@ -24,6 +24,8 @@ type memFsNode struct {
 	isDir    bool
 	nodeId   uint64 // storage data-node id
 	perm     os.FileMode
+	uid      int
+	gid      int
 	aTime    time.Time
 	cTime    time.Time
 	mTime    time.Time
@@ -137,8 +139,8 @@ func NewMemFS() *MemFS {
 		},
 		attributes: fs.Attributes{
 			LinkSupport:     true,
-			SymlinkSupport:  false,   // unsopported
-			ChownRestricted: true,    // unsopported
+			SymlinkSupport:  false,   // unsupported
+			ChownRestricted: false,   // allow chown in memfs
 			MaxName:         255,     // common value
 			MaxRead:         1048576, // common value
 			MaxWrite:        1048576, // common value
@@ -171,6 +173,8 @@ func (s *MemFS) getFileInfo(n *memFsNode) *fileInfo {
 		id:       n.id,
 		name:     path.Base(n.name),
 		perm:     n.perm,
+		uid:      uint32(n.uid),
+		gid:      uint32(n.gid),
 		size:     n.size,
 		modTime:  n.mTime,
 		aTime:    n.aTime,
@@ -477,7 +481,15 @@ func (s *MemFS) ResolveHandle(fh []byte) (string, error) {
 }
 
 func (s *MemFS) Chown(name string, uid, gid int) error {
-	log.Warn("TODO: memfs.Chown not implemented")
+	s.lck.Lock()
+	defer s.lck.Unlock()
+
+	node, found := s.getNode(name)
+	if !found {
+		return os.ErrNotExist
+	}
+	node.uid = uid
+	node.gid = gid
 	return nil
 }
 

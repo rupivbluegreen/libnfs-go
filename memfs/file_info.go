@@ -9,6 +9,8 @@ type fileInfo struct {
 	id       uint64
 	name     string
 	perm     os.FileMode
+	uid      uint32
+	gid      uint32
 	size     int64
 	modTime  time.Time
 	aTime    time.Time
@@ -51,4 +53,12 @@ func (fi fileInfo) Sys() interface{} {
 
 func (fi fileInfo) NumLinks() int {
 	return fi.numLinks
+}
+
+func (fi fileInfo) Uid() uint32 {
+	return fi.uid
+}
+
+func (fi fileInfo) Gid() uint32 {
+	return fi.gid
 }
