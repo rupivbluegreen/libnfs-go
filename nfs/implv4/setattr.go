@@ -39,18 +39,10 @@ func setAttr(x nfs.RPCContext, args *nfs.SETATTR4args) (*nfs.SETATTR4res, error)
 		return resFailPerm, nil
 	}
 
-	seqId := uint32(0)
-	if args.StateId != nil {
-		seqId = args.StateId.SeqId
-	}
-
 	f := (fs.File)(nil)
 	// pathName := cwd
 
-	of := x.Stat().GetOpenedFile(seqId)
-	if of == nil && args.StateId != nil && args.StateId.Other[0] != 0 {
-		of = x.Stat().GetOpenedFile(args.StateId.Other[0])
-	}
+	of := lookupOpenFile(x, args.StateId)
 
 	if of != nil {
 		f = of.File()

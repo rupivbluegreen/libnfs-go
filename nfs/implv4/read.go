@@ -16,15 +16,11 @@ func read(x nfs.RPCContext, args *nfs.READ4args) (*nfs.READ4res, error) {
 
 	// log.Debugf("read data from file: '%s'", pathName)
 
-	seqId := uint32(0)
-	if args != nil && args.StateId != nil {
-		seqId = args.StateId.SeqId
+	var sid *nfs.StateId4
+	if args != nil {
+		sid = args.StateId
 	}
-
-	of := x.Stat().GetOpenedFile(seqId)
-	if of == nil && args != nil && args.StateId != nil && args.StateId.Other[0] != 0 {
-		of = x.Stat().GetOpenedFile(args.StateId.Other[0])
-	}
+	of := lookupOpenFile(x, sid)
 	if of == nil {
 		return &nfs.READ4res{Status: nfs.NFS4ERR_INVAL}, nil
 	}
