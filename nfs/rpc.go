@@ -30,11 +30,19 @@ const (
 )
 
 const (
-	AUTH_FLAVOR_NULL = iota
+	AUTH_FLAVOR_NULL = uint32(iota)
 	AUTH_FLAVOR_UNIX
 	AUTH_FLAVOR_SHORT
 	AUTH_FLAVOR_DES
 )
+
+// AUTH_FLAVOR_TLS is the RPC auth flavor used by the RFC 9289
+// in-band STARTTLS upgrade. A client sends a NULL procedure call
+// with cred.flavor = AUTH_TLS to ask whether the server supports
+// transport-layer TLS; a server that does answers with the same
+// flavor in the reply verifier and immediately performs a TLS
+// handshake on the same TCP connection.
+const AUTH_FLAVOR_TLS = uint32(7)
 
 const (
 	AUTH_BADCRED      = uint32(iota + 1) /* bad credentials (seal broken) */

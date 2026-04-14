@@ -38,6 +38,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -46,21 +47,39 @@ import (
 )
 
 type Server struct {
-	listener net.Listener
-	backend  nfs.Backend
+	listener  net.Listener
+	backend   nfs.Backend
+	tlsConfig *tls.Config
 }
 
-func NewServerTCP(address string, backend nfs.Backend) (*Server, error) {
+// Option configures a Server. Use With* helpers below.
+type Option func(*Server)
+
+// WithTLSConfig enables in-band STARTTLS (RFC 9289) for this server.
+// When set, a client probing with an AUTH_TLS NULL RPC will receive
+// an AUTH_TLS reply, after which the server performs a TLS handshake
+// on the same TCP connection and continues all subsequent RPCs over
+// the encrypted transport. Without this option, AUTH_TLS probes are
+// answered with AUTH_NONE so the client falls back to plaintext.
+func WithTLSConfig(cfg *tls.Config) Option {
+	return func(s *Server) { s.tlsConfig = cfg }
+}
+
+func NewServerTCP(address string, backend nfs.Backend, opts ...Option) (*Server, error) {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("net.Listen: %w", err)
 	}
-	return NewServer(ln, backend)
+	return NewServer(ln, backend, opts...)
 }
 
-// NewServer returns a new server with the given listener (e.g. net.Listen, tls.Listen, etc.)
-func NewServer(l net.Listener, backend nfs.Backend) (*Server, error) {
-	return &Server{listener: l, backend: backend}, nil
+// NewServer returns a new server with the given listener.
+func NewServer(l net.Listener, backend nfs.Backend, opts ...Option) (*Server, error) {
+	s := &Server{listener: l, backend: backend}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s, nil
 }
 
 func (s *Server) Serve() error {
@@ -77,7 +96,7 @@ func (s *Server) Serve() error {
 		} else {
 			go func() {
 				defer conn.Close()
-				if err := handleSession(ctx, s.backend, conn); err != nil {
+				if err := handleSession(ctx, s.backend, conn, s.tlsConfig); err != nil {
 					log.Errorf("handleSession: %v", err)
 				}
 			}()
