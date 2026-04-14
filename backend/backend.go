@@ -33,6 +33,7 @@ func (s *backendSession) GetStatService() nfs.StatService {
 type Backend struct {
 	vfsLoader      func() fs.FS
 	authentication nfs.AuthenticationHandler
+	registry       *SessionRegistry
 }
 
 // New creates a new Backend instance.
@@ -40,13 +41,19 @@ func New(vfsLoader func() fs.FS, authentication nfs.AuthenticationHandler) *Back
 	return &Backend{
 		vfsLoader:      vfsLoader,
 		authentication: authentication,
+		registry:       NewSessionRegistry(),
 	}
+}
+
+// Registry returns the backend-wide NFSv4.1 session registry.
+func (b *Backend) Registry() *SessionRegistry {
+	return b.registry
 }
 
 func (b *Backend) CreateSession(state nfs.SessionState) nfs.BackendSession {
 	return &backendSession{
 		vfs:            b.vfsLoader(),
-		stat:           new(Stat),
+		stat:           &Stat{backend: b},
 		authentication: b.authentication,
 	}
 }

@@ -33,6 +33,60 @@ type Stat struct {
 	openedFiles map[uint32]*openedFile // stateid4.seqid => *openedFile
 
 	seqId uint32
+
+	// NFSv4.1 session tracking. sessLck is intentionally separate from lck to
+	// avoid interleaving with the handle-stack critical sections.
+	backend        *Backend
+	sessLck        sync.Mutex
+	currentSession *SessionRecord
+	pendingSeqRes  interface{}
+}
+
+// Backend returns the parent *Backend boxed as interface{} to avoid widening
+// the StatService interface with a backend-package concrete type (which would
+// induce an import cycle: nfs -> backend -> nfs).
+func (t *Stat) Backend() interface{} {
+	return t.backend
+}
+
+// CurrentSession returns the active *SessionRecord set by SEQUENCE, boxed as
+// interface{}. Callers in the dispatcher type-assert.
+func (t *Stat) CurrentSession() interface{} {
+	t.sessLck.Lock()
+	defer t.sessLck.Unlock()
+	if t.currentSession == nil {
+		return nil
+	}
+	return t.currentSession
+}
+
+// SetCurrentSession accepts *SessionRecord (or nil) boxed as interface{}.
+func (t *Stat) SetCurrentSession(v interface{}) {
+	t.sessLck.Lock()
+	defer t.sessLck.Unlock()
+	if v == nil {
+		t.currentSession = nil
+		return
+	}
+	if s, ok := v.(*SessionRecord); ok {
+		t.currentSession = s
+	}
+}
+
+// PendingSequenceResponse holds the SEQUENCE reply emitted by the current
+// compound, kept as interface{} so this package does not need to import the
+// nfs response types.
+func (t *Stat) PendingSequenceResponse() interface{} {
+	t.sessLck.Lock()
+	defer t.sessLck.Unlock()
+	return t.pendingSeqRes
+}
+
+// SetPendingSequenceResponse stores an opaque pending SEQUENCE reply.
+func (t *Stat) SetPendingSequenceResponse(v interface{}) {
+	t.sessLck.Lock()
+	defer t.sessLck.Unlock()
+	t.pendingSeqRes = v
 }
 
 func (t *Stat) SetCurrentHandle(fh nfs.FileHandle4) {

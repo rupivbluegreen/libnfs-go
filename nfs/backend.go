@@ -39,6 +39,15 @@ type StatService interface {
 
 	// CleanUp should remove all opened files and reset handle stack.
 	CleanUp()
+
+	// NFSv4.1 session accessors. All values are passed as interface{} to keep
+	// the nfs package free of any backend-package types and avoid import cycles.
+	// The compound dispatcher type-asserts on read.
+	Backend() interface{}
+	CurrentSession() interface{}
+	SetCurrentSession(interface{})
+	PendingSequenceResponse() interface{}
+	SetPendingSequenceResponse(interface{})
 }
 
 // BackendSession has a lifetime exact as the client connection.
