@@ -87,6 +87,54 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 					sizeConsumed += size
 				}
 
+			case nfs.OP4_CREATE_SESSION:
+				args := &nfs.CREATE_SESSION4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
+			case nfs.OP4_SEQUENCE:
+				args := &nfs.SEQUENCE4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
+			case nfs.OP4_DESTROY_SESSION:
+				args := &nfs.DESTROY_SESSION4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
+			case nfs.OP4_DESTROY_CLIENTID:
+				args := &nfs.DESTROY_CLIENTID4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
+			case nfs.OP4_FREE_STATEID:
+				args := &nfs.FREE_STATEID4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
+			case nfs.OP4_RECLAIM_COMPLETE:
+				args := &nfs.RECLAIM_COMPLETE4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
 			case nfs.OP4_PUTROOTFH:
 			case nfs.OP4_GETATTR:
 				args := &nfs.GETATTR4args{}
@@ -279,6 +327,26 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 
 		log.Debugf("(%d) %s", i, nfs.Proc4Name(opnum4))
 
+		// v4.1+: the first op in any compound MUST be SEQUENCE, with the
+		// exception of the session-establishment ops listed in RFC 8881
+		// §2.10.6.1. Anything else gets NFS4ERR_OP_NOT_IN_SESSION as a
+		// single-op reply.
+		if i == 0 && minorVer >= 1 {
+			switch opnum4 {
+			case nfs.OP4_SEQUENCE,
+				nfs.OP4_EXCHANGE_ID,
+				nfs.OP4_CREATE_SESSION,
+				nfs.OP4_DESTROY_SESSION,
+				nfs.OP4_DESTROY_CLIENTID:
+				// allowed
+			default:
+				rsOpList = append(rsOpList, opnum4)
+				rsStatusList = append(rsStatusList, nfs.NFS4ERR_OP_NOT_IN_SESSION)
+				rsList = append(rsList, &nfs.ResGenericRaw{Status: nfs.NFS4ERR_OP_NOT_IN_SESSION})
+				goto writeReply
+			}
+		}
+
 		switch opnum4 {
 		case nfs.OP4_SETCLIENTID:
 			args := &nfs.SETCLIENTID4args{}
@@ -317,20 +385,100 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 			} else {
 				sizeConsumed += size
 			}
-
-			// todo: ...
-			res := &nfs.EXCHANGE_ID4res{
-				Status: nfs.NFS4_OK,
-				Ok: &nfs.EXCHANGE_ID4resok{
-					ClientId:     0,
-					SequenceId:   0,
-					StateProtect: &nfs.StateProtect4R{},
-					ServerImplId: &nfs.NfsImplId4{
-						Date: &nfs.NfsTime4{},
-					},
-				},
+			res, err := exchangeId(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
 			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
 
+		case nfs.OP4_CREATE_SESSION:
+			args := &nfs.CREATE_SESSION4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := createSession(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_SEQUENCE:
+			args := &nfs.SEQUENCE4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := sequence(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_DESTROY_SESSION:
+			args := &nfs.DESTROY_SESSION4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := destroySession(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_DESTROY_CLIENTID:
+			args := &nfs.DESTROY_CLIENTID4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := destroyClientId(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_FREE_STATEID:
+			args := &nfs.FREE_STATEID4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := freeStateId(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_RECLAIM_COMPLETE:
+			args := &nfs.RECLAIM_COMPLETE4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := reclaimComplete(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
 			rsOpList = append(rsOpList, opnum4)
 			rsStatusList = append(rsStatusList, res.Status)
 			rsList = append(rsList, res)
@@ -754,6 +902,7 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 		}
 	}
 
+writeReply:
 	lastStatus := nfs.NFS4_OK
 	if len(rsStatusList) > 0 {
 		lastStatus = rsStatusList[len(rsStatusList)-1]
