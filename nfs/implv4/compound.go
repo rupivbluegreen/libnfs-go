@@ -1,11 +1,63 @@
 package implv4
 
 import (
+	"bytes"
 	"io"
 
+	"github.com/smallfz/libnfs-go/backend"
 	"github.com/smallfz/libnfs-go/log"
 	"github.com/smallfz/libnfs-go/nfs"
+	"github.com/smallfz/libnfs-go/xdr"
 )
+
+// buildCompoundBody serialises the COMPOUND4res body — status, tag,
+// resarray<> — into a fresh xdr.Writer-backed buffer. Used both to
+// emit the live reply and to populate the slot reply cache for v4.1+
+// replay protection.
+func buildCompoundBody(
+	tag string,
+	rsStatusList []uint32,
+	rsOpList []uint32,
+	rsList []interface{},
+) ([]byte, error) {
+	lastStatus := nfs.NFS4_OK
+	if len(rsStatusList) > 0 {
+		lastStatus = rsStatusList[len(rsStatusList)-1]
+	}
+	var buf bytes.Buffer
+	bw := xdr.NewWriter(&buf)
+	if _, err := bw.WriteUint32(lastStatus); err != nil {
+		return nil, err
+	}
+	if _, err := bw.WriteAny(tag); err != nil {
+		return nil, err
+	}
+	if _, err := bw.WriteUint32(uint32(len(rsStatusList))); err != nil {
+		return nil, err
+	}
+	for i, rs := range rsList {
+		op := rsOpList[i]
+		if _, err := bw.WriteUint32(op); err != nil {
+			return nil, err
+		}
+		switch res := rs.(type) {
+		case *nfs.ResGenericRaw:
+			if _, err := bw.WriteUint32(res.Status); err != nil {
+				return nil, err
+			}
+			if res.Reader != nil {
+				if _, err := io.Copy(&buf, res.Reader); err != nil {
+					log.Errorf("buildCompoundBody: io.Copy: %v", err)
+				}
+			}
+		default:
+			if _, err := bw.WriteAny(rs); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return buf.Bytes(), nil
+}
 
 func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 	r, w := ctx.Reader(), ctx.Writer()
@@ -473,6 +525,26 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 				return sizeConsumed, err
 			} else {
 				sizeConsumed += size
+			}
+			// Slot reply cache short-circuit (RFC 8881 §2.10.6.2). If
+			// the client retransmits with the same SEQUENCE seqid we
+			// already processed, serve the cached compound body
+			// verbatim instead of re-running the ops. Anything that
+			// already executed and committed (e.g. an OPEN that
+			// allocated state) MUST return byte-identical bytes.
+			if cached, ok := lookupReplay(ctx, args); ok {
+				log.Debugf("compound: slot replay hit (sess=%x seq=%d)",
+					args.SessionId[:4], args.SequenceId)
+				if _, err := w.Write(cached); err != nil {
+					return sizeConsumed, err
+				}
+				// Drain any remaining ops in this compound so the
+				// reader stays aligned for the next request on this
+				// connection.
+				if err := drainRemainingOps(r, opsCnt-i-1); err != nil {
+					log.Warnf("compound: replay drain: %v", err)
+				}
+				return sizeConsumed, nil
 			}
 			res, err := sequence(ctx, args)
 			if err != nil {
@@ -1103,32 +1175,28 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 	}
 
 writeReply:
-	lastStatus := nfs.NFS4_OK
-	if len(rsStatusList) > 0 {
-		lastStatus = rsStatusList[len(rsStatusList)-1]
+	body, err := buildCompoundBody(tag, rsStatusList, rsOpList, rsList)
+	if err != nil {
+		return sizeConsumed, err
 	}
 
-	w.WriteUint32(lastStatus)
-	w.WriteAny(tag) // tag: use the same as in request.
+	if _, err := w.Write(body); err != nil {
+		return sizeConsumed, err
+	}
 
-	w.WriteUint32(uint32(len(rsStatusList)))
-	for i, rs := range rsList {
-		op := rsOpList[i]
-
-		w.WriteUint32(op)
-
-		switch res := rs.(type) {
-		case *nfs.ResGenericRaw:
-			w.WriteUint32(res.Status)
-			if res.Reader != nil {
-				if _, err := io.Copy(w, res.Reader); err != nil {
-					log.Errorf("Compound(): io.Copy: %v", err)
-				}
-			}
-
-		default:
-			w.WriteAny(rs)
-		}
+	// Stash the body in the active session's slot reply cache so a
+	// retransmit with the same SEQUENCE seqid can be served byte-for-
+	// byte without re-running the compound. Only applies on v4.1+
+	// (where ctx.Stat().CurrentSession() is non-nil) and only when
+	// the SEQUENCE handler advanced the slot's seqid this round.
+	if sess, ok := ctx.Stat().CurrentSession().(*backend.SessionRecord); ok && sess != nil && len(sess.Slots) > 0 {
+		slot := &sess.Slots[0]
+		slot.Mu.Lock()
+		cached := make([]byte, len(body))
+		copy(cached, body)
+		slot.Cached = cached
+		slot.CacheHit = false // false until the next replay short-circuit
+		slot.Mu.Unlock()
 	}
 
 	return sizeConsumed, nil
