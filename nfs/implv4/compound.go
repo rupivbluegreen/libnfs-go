@@ -930,9 +930,17 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 			rsList = append(rsList, res)
 
 		default:
-			log.Warnf("op not handled: %d.", opnum4)
-			w.WriteUint32(nfs.NFS4ERR_OP_ILLEGAL)
-			return sizeConsumed, nil
+			// Unknown op. Per RFC 8881 §15.1.6 the correct result is
+			// NFS4ERR_NOTSUPP as a single-op failure. We can't safely
+			// continue the compound because the op's args are still in
+			// the reader — terminate the compound after this op so the
+			// wire stays aligned, and let the well-formed reply carry
+			// the NOTSUPP status to the client.
+			log.Warnf("op not handled: %d (returning NFS4ERR_NOTSUPP).", opnum4)
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, nfs.NFS4ERR_NOTSUPP)
+			rsList = append(rsList, &nfs.ResGenericRaw{Status: nfs.NFS4ERR_NOTSUPP})
+			goto writeReply
 		}
 	}
 
