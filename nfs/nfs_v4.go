@@ -75,6 +75,11 @@ const (
 	NFS4ERR_FILE_OPEN           = uint32(10046) /* open file blocks op.     */
 	NFS4ERR_ADMIN_REVOKED       = uint32(10047) /* lock-owner state revoked */
 	NFS4ERR_CB_PATH_DOWN        = uint32(10048) /* callback path down       */
+	NFS4ERR_BADSESSION          = uint32(10052) /* unknown sessionid        */
+	NFS4ERR_BADSLOT             = uint32(10053) /* slot id out of range     */
+	NFS4ERR_SEQ_MISORDERED      = uint32(10063) /* sequence id out of order */
+	NFS4ERR_OP_NOT_IN_SESSION   = uint32(10071) /* op needs SEQUENCE first  */
+	NFS4ERR_SEQUENCE_POS        = uint32(10080) /* SEQUENCE not first op    */
 )
 
 func NFS4err(err error) uint32 {
@@ -153,6 +158,12 @@ const (
 	OP4_WRITE               = uint32(38)
 	OP4_RELEASE_LOCKOWNER   = uint32(39)
 	OP4_EXCHANGE_ID         = uint32(42) // nfs-v4.1, rfc5661
+	OP4_CREATE_SESSION      = uint32(43) // nfs-v4.1, rfc5661
+	OP4_DESTROY_SESSION     = uint32(44) // nfs-v4.1, rfc5661
+	OP4_FREE_STATEID        = uint32(45) // nfs-v4.1, rfc5661
+	OP4_SEQUENCE            = uint32(53) // nfs-v4.1, rfc5661
+	OP4_DESTROY_CLIENTID    = uint32(57) // nfs-v4.1, rfc5661
+	OP4_RECLAIM_COMPLETE    = uint32(58) // nfs-v4.1, rfc5661
 	OP4_ILLEGAL             = uint32(10044)
 )
 
@@ -580,6 +591,108 @@ type EXCHANGE_ID4resok struct {
 type EXCHANGE_ID4res struct {
 	Status uint32
 	Ok     *EXCHANGE_ID4resok // non-nil if status == NFS4_OK
+}
+
+// CREATE_SESSION (RFC 5661 §18.36)
+
+type ChannelAttrs4 struct {
+	HeaderPadSize         uint32
+	MaxRequestSize        uint32
+	MaxResponseSize       uint32
+	MaxResponseSizeCached uint32
+	MaxOperations         uint32
+	MaxRequests           uint32
+	RdmaIrd               []uint32 // optional array, typically empty
+}
+
+type CREATE_SESSION4args struct {
+	ClientId        uint64
+	Sequence        uint32
+	Flags           uint32
+	ForeChanAttrs   ChannelAttrs4
+	BackChanAttrs   ChannelAttrs4
+	CallbackProgram uint32
+	// TODO(v0.3.0): callback_sec_parms<> (RFC 5661 §18.36). The CallbackSecParams4
+	// type does not yet exist in this library; the compound dispatcher must
+	// consume the trailing bytes manually until this is wired up.
+	// CallbackSecParams []CallbackSecParams4
+}
+
+type CREATE_SESSION4resok struct {
+	SessionId     [16]byte
+	Sequence      uint32
+	Flags         uint32
+	ForeChanAttrs ChannelAttrs4
+	BackChanAttrs ChannelAttrs4
+}
+
+type CREATE_SESSION4res struct {
+	Status uint32
+	Ok     *CREATE_SESSION4resok // non-nil if Status == NFS4_OK
+}
+
+// SEQUENCE (RFC 5661 §18.46)
+
+type SEQUENCE4args struct {
+	SessionId     [16]byte
+	SequenceId    uint32
+	SlotId        uint32
+	HighestSlotId uint32
+	CacheThis     bool
+}
+
+type SEQUENCE4resok struct {
+	SessionId           [16]byte
+	SequenceId          uint32
+	SlotId              uint32
+	HighestSlotId       uint32
+	TargetHighestSlotId uint32
+	StatusFlags         uint32
+}
+
+type SEQUENCE4res struct {
+	Status uint32
+	Ok     *SEQUENCE4resok // non-nil if Status == NFS4_OK
+}
+
+// DESTROY_SESSION (RFC 5661 §18.37)
+
+type DESTROY_SESSION4args struct {
+	SessionId [16]byte
+}
+
+type DESTROY_SESSION4res struct {
+	Status uint32
+}
+
+// DESTROY_CLIENTID (RFC 5661 §18.50)
+
+type DESTROY_CLIENTID4args struct {
+	ClientId uint64
+}
+
+type DESTROY_CLIENTID4res struct {
+	Status uint32
+}
+
+// FREE_STATEID (RFC 5661 §18.38)
+
+type FREE_STATEID4args struct {
+	StateId StateId4
+}
+
+type FREE_STATEID4res struct {
+	Status uint32
+}
+
+// RECLAIM_COMPLETE (RFC 5661 §18.51)
+
+type RECLAIM_COMPLETE4args struct {
+	OneFs bool
+}
+
+type RECLAIM_COMPLETE4res struct {
+	Status uint32
 }
 
 type ChangeInfo4 struct {
