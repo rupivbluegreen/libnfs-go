@@ -289,8 +289,60 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 				}
 
 			case nfs.OP4_READLINK:
+
+			// ---- nfs-v4.2 arg drain ----
+			case nfs.OP4_SEEK:
+				args := &nfs.SEEK4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_COPY:
+				args := &nfs.COPY4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_GETXATTR:
+				args := &nfs.GETXATTR4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_SETXATTR:
+				args := &nfs.SETXATTR4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_LISTXATTRS:
+				args := &nfs.LISTXATTRS4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_REMOVEXATTR:
+				args := &nfs.REMOVEXATTR4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+			case nfs.OP4_ALLOCATE, nfs.OP4_DEALLOCATE:
+				args := &nfs.ALLOCATE4args{}
+				if size, err := r.ReadAs(args); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += size
+				}
+
 			default:
-				log.Warnf("op not handled: %d.", opnum4)
+				log.Warnf("op not handled (auth-fail path): %d.", opnum4)
 				w.WriteUint32(nfs.NFS4ERR_OP_ILLEGAL)
 				return sizeConsumed, nil
 			}
@@ -928,6 +980,112 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 			rsOpList = append(rsOpList, opnum4)
 			rsStatusList = append(rsStatusList, res.Status)
 			rsList = append(rsList, res)
+
+		// ---------- nfs-v4.2 (rfc7862 / rfc8276) ----------
+
+		case nfs.OP4_SEEK:
+			args := &nfs.SEEK4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := seek(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_COPY:
+			args := &nfs.COPY4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := copyOp(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_GETXATTR:
+			args := &nfs.GETXATTR4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := getXattr(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_SETXATTR:
+			args := &nfs.SETXATTR4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := setXattr(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_LISTXATTRS:
+			args := &nfs.LISTXATTRS4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := listXattrs(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_REMOVEXATTR:
+			args := &nfs.REMOVEXATTR4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			res, err := removeXattr(ctx, args)
+			if err != nil {
+				return sizeConsumed, err
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_ALLOCATE, nfs.OP4_DEALLOCATE:
+			// Decode args so the reader stays aligned; respond NOTSUPP
+			// so the kernel drops the op and the rest of the compound
+			// (if any) still produces a well-formed reply.
+			args := &nfs.ALLOCATE4args{}
+			if size, err := r.ReadAs(args); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += size
+			}
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, nfs.NFS4ERR_NOTSUPP)
+			rsList = append(rsList, &nfs.ResGenericRaw{Status: nfs.NFS4ERR_NOTSUPP})
 
 		default:
 			// Unknown op. Per RFC 8881 §15.1.6 the correct result is
