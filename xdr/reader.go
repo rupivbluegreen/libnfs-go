@@ -92,6 +92,13 @@ func (r *Reader) ReadUint32() (uint32, error) {
 	return binary.BigEndian.Uint32(buff), nil
 }
 
+// Unmarshaler allows types to implement custom XDR decoding, which is required
+// for discriminated unions (e.g. NFSv4.1 state_protect4_a) that reflection
+// cannot express.
+type Unmarshaler interface {
+	XdrUnmarshal(r *Reader) (int, error)
+}
+
 func (r *Reader) ReadValue(v reflect.Value) (int, error) {
 	if !v.IsValid() {
 		return 0, errors.New("invalid target")
@@ -100,6 +107,12 @@ func (r *Reader) ReadValue(v reflect.Value) (int, error) {
 	kind := v.Kind()
 	if kind != reflect.Ptr {
 		return 0, errors.New("ReadAs: expects a ptr target")
+	}
+
+	if v.CanInterface() {
+		if u, ok := v.Interface().(Unmarshaler); ok {
+			return u.XdrUnmarshal(r)
+		}
 	}
 
 	kind = v.Elem().Kind()

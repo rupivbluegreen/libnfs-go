@@ -161,6 +161,7 @@ const (
 	OP4_CREATE_SESSION      = uint32(43) // nfs-v4.1, rfc5661
 	OP4_DESTROY_SESSION     = uint32(44) // nfs-v4.1, rfc5661
 	OP4_FREE_STATEID        = uint32(45) // nfs-v4.1, rfc5661
+	OP4_SECINFO_NO_NAME     = uint32(52) // nfs-v4.1, rfc5661
 	OP4_SEQUENCE            = uint32(53) // nfs-v4.1, rfc5661
 	OP4_DESTROY_CLIENTID    = uint32(57) // nfs-v4.1, rfc5661
 	OP4_RECLAIM_COMPLETE    = uint32(58) // nfs-v4.1, rfc5661
@@ -605,17 +606,31 @@ type ChannelAttrs4 struct {
 	RdmaIrd               []uint32 // optional array, typically empty
 }
 
+// AuthSysParms4 is the AUTH_SYS (1) body of callback_sec_parms4 per RFC 5531.
+type AuthSysParms4 struct {
+	Stamp       uint32
+	MachineName string
+	Uid         uint32
+	Gid         uint32
+	Gids        []uint32
+}
+
+// CallbackSecParams4 is the callback_sec_parms4 discriminated union
+// (RFC 5661 §18.36 / RFC 5531 AUTH_* flavors). Decoding requires a custom
+// XdrUnmarshal because the body depends on CbSecFlavor.
+type CallbackSecParams4 struct {
+	CbSecFlavor uint32
+	SysCred     *AuthSysParms4 // non-nil iff CbSecFlavor == AUTH_SYS
+}
+
 type CREATE_SESSION4args struct {
-	ClientId        uint64
-	Sequence        uint32
-	Flags           uint32
-	ForeChanAttrs   ChannelAttrs4
-	BackChanAttrs   ChannelAttrs4
-	CallbackProgram uint32
-	// TODO(v0.3.0): callback_sec_parms<> (RFC 5661 §18.36). The CallbackSecParams4
-	// type does not yet exist in this library; the compound dispatcher must
-	// consume the trailing bytes manually until this is wired up.
-	// CallbackSecParams []CallbackSecParams4
+	ClientId          uint64
+	Sequence          uint32
+	Flags             uint32
+	ForeChanAttrs     ChannelAttrs4
+	BackChanAttrs     ChannelAttrs4
+	CallbackProgram   uint32
+	CallbackSecParams []CallbackSecParams4
 }
 
 type CREATE_SESSION4resok struct {
@@ -743,10 +758,13 @@ type CreateHow4 struct {
 }
 
 const (
-	CLAIM_NULL          = uint32(0)
-	CLAIM_PREVIOUS      = uint32(1)
-	CLAIM_DELEGATE_CUR  = uint32(2)
-	CLAIM_DELEGATE_PREV = uint32(3)
+	CLAIM_NULL              = uint32(0)
+	CLAIM_PREVIOUS          = uint32(1)
+	CLAIM_DELEGATE_CUR      = uint32(2)
+	CLAIM_DELEGATE_PREV     = uint32(3)
+	CLAIM_FH                = uint32(4) // nfs-v4.1, rfc5661 §18.16
+	CLAIM_DELEG_CUR_FH      = uint32(5) // nfs-v4.1
+	CLAIM_DELEG_PREV_FH     = uint32(6) // nfs-v4.1
 )
 
 const (

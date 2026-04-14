@@ -45,6 +45,16 @@ func TestRoundTripCreateSession4Args(t *testing.T) {
 		ForeChanAttrs:   sampleChannelAttrs(),
 		BackChanAttrs:   sampleChannelAttrs(),
 		CallbackProgram: 0x40000000,
+		CallbackSecParams: []CallbackSecParams4{
+			{CbSecFlavor: AUTH_FLAVOR_NULL},
+			{CbSecFlavor: AUTH_FLAVOR_UNIX, SysCred: &AuthSysParms4{
+				Stamp:       1,
+				MachineName: "host",
+				Uid:         1000,
+				Gid:         1000,
+				Gids:        []uint32{1000},
+			}},
+		},
 	}
 	dst := &CREATE_SESSION4args{}
 	roundTrip(t, src, dst)

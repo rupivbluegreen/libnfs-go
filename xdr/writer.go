@@ -138,12 +138,15 @@ func (w *Writer) WriteValue(v reflect.Value) (int, error) {
 		return sizeSent, nil
 
 	case reflect.Slice:
-		if v.IsNil() {
-			return 0, nil
-		}
-
+		// A nil slice must still emit an XDR length prefix of 0. Earlier
+		// versions of this writer skipped nil slices entirely, which silently
+		// truncated the wire representation and corrupted any field that
+		// followed. Treat nil as an empty slice.
 		vElTyp := vtyp.Elem()
-		cnt := v.Len()
+		cnt := 0
+		if !v.IsNil() {
+			cnt = v.Len()
+		}
 
 		sizeSent := 0
 		if size, err := w.WriteUint32(uint32(cnt)); err != nil {

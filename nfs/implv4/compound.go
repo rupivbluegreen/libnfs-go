@@ -185,6 +185,13 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 					sizeConsumed += size
 				}
 
+			case nfs.OP4_SECINFO_NO_NAME:
+				if _, err := r.ReadUint32(); err != nil {
+					return sizeConsumed, err
+				} else {
+					sizeConsumed += 4
+				}
+
 			case nfs.OP4_RENEW:
 				args := &nfs.RENEW4args{}
 				if size, err := r.ReadAs(args); err != nil {
@@ -645,6 +652,33 @@ func Compound(h *nfs.RPCMsgCall, ctx nfs.RPCContext) (int, error) {
 					Items: []*nfs.Secinfo4{
 						{
 							Flavor: 0,
+							FlavorInfo: &nfs.RPCSecGssInfo{
+								Service: nfs.RPC_GSS_SVC_NONE,
+							},
+						},
+					},
+				},
+			}
+
+			rsOpList = append(rsOpList, opnum4)
+			rsStatusList = append(rsStatusList, res.Status)
+			rsList = append(rsList, res)
+
+		case nfs.OP4_SECINFO_NO_NAME:
+			// secinfo_no_name4 args = enum secinfo_style4 { SECINFO_STYLE4_CURRENT_FH = 0, SECINFO_STYLE4_PARENT = 1 }
+			if _, err := r.ReadUint32(); err != nil {
+				return sizeConsumed, err
+			} else {
+				sizeConsumed += 4
+			}
+
+			// Response shape is SECINFO4res; advertise AUTH_SYS support.
+			res := &nfs.SECINFO4res{
+				Status: nfs.NFS4_OK,
+				Ok: &nfs.SECINFO4resok{
+					Items: []*nfs.Secinfo4{
+						{
+							Flavor: nfs.AUTH_FLAVOR_UNIX,
 							FlavorInfo: &nfs.RPCSecGssInfo{
 								Service: nfs.RPC_GSS_SVC_NONE,
 							},

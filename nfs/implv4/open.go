@@ -140,6 +140,23 @@ func readOpOpenArgs(r *xdr.Reader) (*nfs.OPEN4args, int, error) {
 		sizeConsumed += size
 		claim.FileDelegatePrev = prev
 
+	case nfs.CLAIM_FH:
+		// nfs-v4.1 only: open the file represented by the current filehandle.
+		// No body — the path comes from the prior PUTFH on this compound.
+
+	case nfs.CLAIM_DELEG_CUR_FH:
+		// nfs-v4.1: stateid follows. We don't issue delegations, but decode
+		// for compatibility so the dispatcher doesn't drop the wire.
+		st := &nfs.StateId4{}
+		size, err = r.ReadAs(st)
+		if err != nil {
+			return nil, sizeConsumed, err
+		}
+		sizeConsumed += size
+
+	case nfs.CLAIM_DELEG_PREV_FH:
+		// nfs-v4.1: no body.
+
 	default:
 		return nil, sizeConsumed, fmt.Errorf("invalid claim: %v", claim.Claim)
 	}
@@ -195,13 +212,20 @@ func open(x nfs.RPCContext, args *nfs.OPEN4args) (*nfs.ResGenericRaw, error) {
 		return &nfs.ResGenericRaw{Status: nfs.NFS4ERR_PERM}, nil
 	}
 
-	if di, err := vfs.Stat(cwd); err != nil {
-		return resFail500, nil
-	} else if !di.IsDir() {
-		return resFailPerm, nil
+	// CLAIM_FH (v4.1+) opens the file represented by the current FH directly.
+	// In that case the current FH already points at the file, not its parent
+	// directory, so we skip the parent-is-dir check and use cwd as the path.
+	var pathName string
+	if args.Claim != nil && args.Claim.Claim == nfs.CLAIM_FH {
+		pathName = cwd
+	} else {
+		if di, err := vfs.Stat(cwd); err != nil {
+			return resFail500, nil
+		} else if !di.IsDir() {
+			return resFailPerm, nil
+		}
+		pathName = fs.Join(cwd, args.Claim.File)
 	}
-
-	pathName := fs.Join(cwd, args.Claim.File)
 	createNew := false
 
 	fi, err := vfs.Stat(pathName)
