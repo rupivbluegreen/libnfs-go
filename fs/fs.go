@@ -78,6 +78,30 @@ type AllowLink interface {
 	Symlink(string, string) error
 }
 
+// CopyCapable is implemented by filesystems that can do an efficient
+// full-object copy — for example an S3 backend that can turn COPY into
+// a single CopyObject request. NFSv4.2 COPY handlers type-assert to
+// this interface and fall back to NFS4ERR_NOTSUPP (which the Linux
+// kernel handles by emulating COPY with client-side READ+WRITE) when
+// the backing FS does not implement it.
+type CopyCapable interface {
+	Copy(srcPath, dstPath string) error
+}
+
+// XattrCapable is implemented by filesystems that map NFSv4.2 /
+// RFC 8276 extended attributes onto some backing store. The NFSv4.2
+// xattr handlers type-assert to this interface; backends that do not
+// implement it report NFS4ERR_NOTSUPP. The option argument to SetXattr
+// is the SETXATTR4_EITHER / _CREATE / _REPLACE flag from RFC 8276;
+// backends map it to create/replace semantics and return os.ErrExist
+// or os.ErrNotExist as appropriate.
+type XattrCapable interface {
+	GetXattr(path, name string) ([]byte, error)
+	SetXattr(path, name string, value []byte, option uint32) error
+	ListXattrs(path string) ([]string, error)
+	RemoveXattr(path, name string) error
+}
+
 // https://datatracker.ietf.org/doc/html/rfc7530#section-5.6
 type Attributes struct {
 	LinkSupport     bool   // id: 5
