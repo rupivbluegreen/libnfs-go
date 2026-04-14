@@ -14,6 +14,11 @@ func computeAccessOnFile(mode os.FileMode, access uint32) (uint32, uint32) {
 	support |= nfs.ACCESS4_EXTEND
 	support |= nfs.ACCESS4_DELETE
 	support |= nfs.ACCESS4_EXECUTE
+	// rfc8276 (v4.2) xattr access bits — advertise so the Linux client
+	// will issue setxattr/getxattr/listxattrs/removexattr ops.
+	support |= nfs.ACCESS4_XAREAD
+	support |= nfs.ACCESS4_XAWRITE
+	support |= nfs.ACCESS4_XALIST
 
 	perm := (uint32(mode) >> 6) & uint32(0b0111)
 
@@ -26,11 +31,14 @@ func computeAccessOnFile(mode os.FileMode, access uint32) (uint32, uint32) {
 	if r > 0 {
 		accForFh = accForFh | nfs.ACCESS4_READ
 		accForFh = accForFh | nfs.ACCESS4_LOOKUP
+		accForFh = accForFh | nfs.ACCESS4_XAREAD
+		accForFh = accForFh | nfs.ACCESS4_XALIST
 	}
 	if w > 0 {
 		accForFh = accForFh | nfs.ACCESS4_MODIFY
 		accForFh = accForFh | nfs.ACCESS4_EXTEND
 		accForFh = accForFh | nfs.ACCESS4_DELETE
+		accForFh = accForFh | nfs.ACCESS4_XAWRITE
 	}
 	if xe > 0 {
 		accForFh = accForFh | nfs.ACCESS4_LOOKUP

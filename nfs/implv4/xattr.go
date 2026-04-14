@@ -48,17 +48,22 @@ func currentPath(x nfs.RPCContext) (string, uint32) {
 	return path, nfs.NFS4_OK
 }
 
-// validateXattrName rejects anything outside the user.* namespace.
-// trusted.* / security.* / system.* need a privilege context we don't
-// have under AUTH_SYS; mapping them to user-metadata would silently
-// bypass the kernel's access checks. We return the specific NFS error
-// the caller should report (NOXATTR vs PERM).
+// validateXattrName performs sanity checks on the wire name. RFC 8276
+// only defines one xattr namespace (user), so the Linux client strips
+// the "user." prefix before sending; names here arrive naked. We
+// reject empty names and reject names that carry a redundant
+// namespace prefix (which would indicate a misbehaving client or a
+// confused caller). forWrite is unused for now but kept so the call
+// sites in the four handlers stay symmetric.
 func validateXattrName(name string, forWrite bool) uint32 {
-	if !strings.HasPrefix(name, "user.") {
-		if forWrite {
-			return nfs.NFS4ERR_PERM
+	_ = forWrite
+	if name == "" {
+		return nfs.NFS4ERR_INVAL
+	}
+	for _, prefix := range []string{"user.", "trusted.", "security.", "system."} {
+		if strings.HasPrefix(name, prefix) {
+			return nfs.NFS4ERR_INVAL
 		}
-		return nfs.NFS4ERR_NOXATTR
 	}
 	return nfs.NFS4_OK
 }
@@ -120,6 +125,7 @@ func setXattr(x nfs.RPCContext, args *nfs.SETXATTR4args) (*nfs.SETXATTR4res, err
 		return &nfs.SETXATTR4res{Status: st}, nil
 	}
 	if err := cap.SetXattr(path, args.Name, args.Value, args.Option); err != nil {
+		log.Warnf("setxattr: %s[%s]: %v", path, args.Name, err)
 		return &nfs.SETXATTR4res{Status: mapXattrError(err)}, nil
 	}
 	return &nfs.SETXATTR4res{
@@ -141,15 +147,19 @@ func listXattrs(x nfs.RPCContext, args *nfs.LISTXATTRS4args) (*nfs.LISTXATTRS4re
 	if err != nil {
 		return &nfs.LISTXATTRS4res{Status: mapXattrError(err)}, nil
 	}
-	// The backend returns fully-qualified names (e.g. "user.checksum").
-	// We only support user.* so this is a no-op filter, but keep the
-	// defensive guard in case a backend ever starts returning names
-	// from a namespace we don't want to surface.
+	// Wire names are naked per RFC 8276; the kernel prepends the
+	// "user." namespace prefix on its end. Filter out anything that
+	// somehow came out of the backend with a namespace prefix, since
+	// that would violate the contract.
 	filtered := make([]string, 0, len(names))
 	for _, n := range names {
-		if strings.HasPrefix(n, "user.") {
-			filtered = append(filtered, n)
+		if strings.Contains(n, ".") && (strings.HasPrefix(n, "user.") ||
+			strings.HasPrefix(n, "trusted.") ||
+			strings.HasPrefix(n, "security.") ||
+			strings.HasPrefix(n, "system.")) {
+			continue
 		}
+		filtered = append(filtered, n)
 	}
 	return &nfs.LISTXATTRS4res{
 		Status: nfs.NFS4_OK,

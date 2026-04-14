@@ -85,6 +85,25 @@ func readOpOpenArgs(r *xdr.Reader) (*nfs.OPEN4args, int, error) {
 			sizeConsumed += size
 			how.CreateVerf = verf
 
+		case nfs.EXCLUSIVE4_1:
+			// RFC 5661 §18.16: 8-byte verifier followed by a full
+			// fattr4 for the file's initial attributes. Linux 6.x
+			// uses this for cp's O_EXCL create path at v4.1+.
+			excl := &nfs.CreateVerifier4_1{}
+			if n, err := r.ReadAs(&excl.Verifier); err != nil {
+				return nil, sizeConsumed, err
+			} else {
+				sizeConsumed += n
+			}
+			attr := &nfs.FAttr4{}
+			if n, err := r.ReadAs(attr); err != nil {
+				return nil, sizeConsumed, err
+			} else {
+				sizeConsumed += n
+			}
+			excl.Attrs = attr
+			how.Excl41 = excl
+
 		default:
 			return nil, sizeConsumed, fmt.Errorf(
 				"unexpected createmode: %v",
@@ -197,6 +216,19 @@ func open(x nfs.RPCContext, args *nfs.OPEN4args) (*nfs.ResGenericRaw, error) {
 			raiseWhenExists = true
 		case nfs.EXCLUSIVE4:
 			// Nothing to do here.
+		case nfs.EXCLUSIVE4_1:
+			// v4.1+ exclusive create: verifier + initial attrs. Treat
+			// as GUARDED for the collision check; we don't yet persist
+			// the verifier for replay detection, but the kernel will
+			// still get a correct first-time result.
+			raiseWhenExists = true
+			if args.CreateHow.Excl41 != nil && args.CreateHow.Excl41.Attrs != nil {
+				attr, err := decodeFAttrs4(args.CreateHow.Excl41.Attrs)
+				if err != nil {
+					return resFail500, nil
+				}
+				decAttrs = attr
+			}
 		default:
 			return &nfs.ResGenericRaw{Status: nfs.NFS4ERR_NOTSUPP}, nil
 		}

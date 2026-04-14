@@ -383,6 +383,11 @@ const (
 	ACCESS4_EXTEND  = uint32(0x00000008)
 	ACCESS4_DELETE  = uint32(0x00000010)
 	ACCESS4_EXECUTE = uint32(0x00000020)
+
+	// rfc8276 — xattr access bits (NFSv4.2)
+	ACCESS4_XAREAD  = uint32(0x00000040)
+	ACCESS4_XAWRITE = uint32(0x00000080)
+	ACCESS4_XALIST  = uint32(0x00000100)
 )
 
 // nfs-v4.1, rfc5661
@@ -836,16 +841,23 @@ const (
 )
 
 const (
-	UNCHECKED4 = uint32(0)
-	GUARDED4   = uint32(1)
-	EXCLUSIVE4 = uint32(2)
+	UNCHECKED4     = uint32(0)
+	GUARDED4       = uint32(1)
+	EXCLUSIVE4     = uint32(2)
+	EXCLUSIVE4_1   = uint32(3) // rfc5661 §18.16 (v4.1+)
 )
 
-type CreateHow4 struct {
-	CreateMode uint32 // UNCHECKED4 | GUARDED4 | EXCLUSIVE4
+type CreateVerifier4_1 struct {
+	Verifier [8]byte
+	Attrs    *FAttr4
+}
 
-	CreateAttrs *FAttr4 // if CreateMode == GUARDED4
-	CreateVerf  uint64  // if CreateMode == EXCLUSIVE4
+type CreateHow4 struct {
+	CreateMode uint32 // UNCHECKED4 | GUARDED4 | EXCLUSIVE4 | EXCLUSIVE4_1
+
+	CreateAttrs *FAttr4            // UNCHECKED4 / GUARDED4
+	CreateVerf  uint64             // EXCLUSIVE4
+	Excl41      *CreateVerifier4_1 // EXCLUSIVE4_1 (v4.1+)
 }
 
 const (

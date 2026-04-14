@@ -48,6 +48,7 @@ const (
 	A_time_modify        = 53 // nfstime4, struct{uint64, uint32}
 	A_mounted_on_fileid  = 55 // uint64
 	A_suppattr_exclcreat = 75 // (v4.1) bitmap4
+	A_xattr_support      = 82 // (v4.2, rfc8276) bool
 )
 
 var attrsDefaultSet = []int{
@@ -110,6 +111,7 @@ var attrsSupported = []int{
 	A_time_modify,
 	A_mounted_on_fileid,
 	// A_suppattr_exclcreat,
+	A_xattr_support,
 }
 
 var attrsWritable = map[int]bool{
@@ -154,6 +156,7 @@ var attrNames = map[int]string{
 	A_time_modify:        "time_modify",
 	A_mounted_on_fileid:  "mounted_on_fileid",
 	A_suppattr_exclcreat: "suppattr_exclcreat",
+	A_xattr_support:      "xattr_support",
 }
 
 func GetAttrNameById(id int) (string, bool) {
@@ -214,6 +217,7 @@ func getAttrsMaxBytesSize(req map[int]bool) uint32 {
 		A_time_metadata:     8 + 4,
 		A_time_modify:       8 + 4,
 		A_mounted_on_fileid: 8,
+		A_xattr_support:     4,
 	}
 
 	total := uint32(0)
@@ -457,6 +461,17 @@ func fileInfoToAttrs(vfs fs.FS, pathName string, fi fs.FileInfo, attrsRequest ma
 		case A_suppattr_exclcreat:
 			v := bitmap4Encode(idxSupport)
 			writeAny(a, v, 4+4*len(v))
+
+		case A_xattr_support:
+			// True iff the backing FS implements fs.XattrCapable. The
+			// Linux kernel probes this attribute before attempting any
+			// v4.2 xattr op and short-circuits with EOPNOTSUPP
+			// (locally, no RPC) when the server reports false.
+			v := false
+			if _, ok := vfs.(fs.XattrCapable); ok {
+				v = true
+			}
+			writeAny(a, v, 4)
 
 		default:
 			log.Warnf("(!)requested attr %s not handled!", attrName)

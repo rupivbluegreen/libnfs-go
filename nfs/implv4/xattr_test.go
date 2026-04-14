@@ -141,20 +141,20 @@ func newXattrCtx(f *xattrFakeFS) *xattrFakeCtx {
 
 // --- tests ---
 
-func TestXattr_UserRoundTrip(t *testing.T) {
+func TestXattr_RoundTrip(t *testing.T) {
 	f := newXattrFS()
 	ctx := newXattrCtx(f)
 
 	sres, _ := setXattr(ctx, &nfs.SETXATTR4args{
 		Option: nfs.SETXATTR4_EITHER,
-		Name:   "user.checksum",
+		Name:   "checksum",
 		Value:  []byte("deadbeef"),
 	})
 	if sres.Status != nfs.NFS4_OK {
 		t.Fatalf("setXattr: status=%d", sres.Status)
 	}
 
-	gres, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "user.checksum"})
+	gres, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "checksum"})
 	if gres.Status != nfs.NFS4_OK {
 		t.Fatalf("getXattr: status=%d", gres.Status)
 	}
@@ -166,43 +166,45 @@ func TestXattr_UserRoundTrip(t *testing.T) {
 	if lres.Status != nfs.NFS4_OK {
 		t.Fatalf("listXattrs: status=%d", lres.Status)
 	}
-	if len(lres.Ok.Names) != 1 || lres.Ok.Names[0] != "user.checksum" {
+	if len(lres.Ok.Names) != 1 || lres.Ok.Names[0] != "checksum" {
 		t.Fatalf("unexpected list: %v", lres.Ok.Names)
 	}
 
-	rres, _ := removeXattr(ctx, &nfs.REMOVEXATTR4args{Name: "user.checksum"})
+	rres, _ := removeXattr(ctx, &nfs.REMOVEXATTR4args{Name: "checksum"})
 	if rres.Status != nfs.NFS4_OK {
 		t.Fatalf("removeXattr: status=%d", rres.Status)
 	}
 
-	gres2, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "user.checksum"})
+	gres2, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "checksum"})
 	if gres2.Status != nfs.NFS4ERR_NOXATTR {
 		t.Fatalf("expected NOXATTR after remove, got %d", gres2.Status)
 	}
 }
 
-func TestXattr_TrustedNamespaceRejected(t *testing.T) {
+func TestXattr_NamespacePrefixRejected(t *testing.T) {
 	ctx := newXattrCtx(newXattrFS())
-
-	g, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "trusted.foo"})
-	if g.Status != nfs.NFS4ERR_NOXATTR {
-		t.Fatalf("GET trusted.*: expected NOXATTR, got %d", g.Status)
-	}
-
-	s, _ := setXattr(ctx, &nfs.SETXATTR4args{Name: "security.selinux", Value: []byte("x")})
-	if s.Status != nfs.NFS4ERR_PERM {
-		t.Fatalf("SET security.*: expected PERM, got %d", s.Status)
+	// Wire names must be naked — any dotted namespace prefix is a
+	// protocol violation and returns INVAL.
+	for _, name := range []string{"user.foo", "trusted.bar", "security.selinux", "system.x"} {
+		s, _ := setXattr(ctx, &nfs.SETXATTR4args{Name: name, Value: []byte("x")})
+		if s.Status != nfs.NFS4ERR_INVAL {
+			t.Fatalf("SET %q: expected INVAL, got %d", name, s.Status)
+		}
+		g, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: name})
+		if g.Status != nfs.NFS4ERR_INVAL {
+			t.Fatalf("GET %q: expected INVAL, got %d", name, g.Status)
+		}
 	}
 }
 
 func TestXattr_CreateExistingFails(t *testing.T) {
 	f := newXattrFS()
 	ctx := newXattrCtx(f)
-	setXattr(ctx, &nfs.SETXATTR4args{Option: nfs.SETXATTR4_EITHER, Name: "user.x", Value: []byte("a")})
+	setXattr(ctx, &nfs.SETXATTR4args{Option: nfs.SETXATTR4_EITHER, Name: "x", Value: []byte("a")})
 
 	r, _ := setXattr(ctx, &nfs.SETXATTR4args{
 		Option: nfs.SETXATTR4_CREATE,
-		Name:   "user.x",
+		Name:   "x",
 		Value:  []byte("b"),
 	})
 	if r.Status != nfs.NFS4ERR_EXIST {
@@ -214,7 +216,7 @@ func TestXattr_ReplaceMissingFails(t *testing.T) {
 	ctx := newXattrCtx(newXattrFS())
 	r, _ := setXattr(ctx, &nfs.SETXATTR4args{
 		Option: nfs.SETXATTR4_REPLACE,
-		Name:   "user.nope",
+		Name:   "nope",
 		Value:  []byte("b"),
 	})
 	if r.Status != nfs.NFS4ERR_NOXATTR {
@@ -227,7 +229,7 @@ func TestXattr_ValueTooBig(t *testing.T) {
 	big := make([]byte, maxXattrValueSize+1)
 	r, _ := setXattr(ctx, &nfs.SETXATTR4args{
 		Option: nfs.SETXATTR4_EITHER,
-		Name:   "user.big",
+		Name:   "big",
 		Value:  big,
 	})
 	if r.Status != nfs.NFS4ERR_XATTR2BIG {
@@ -238,7 +240,7 @@ func TestXattr_ValueTooBig(t *testing.T) {
 func TestXattr_BackendAbsentReturnsNotsupp(t *testing.T) {
 	// ctx with vfs=nil → no xattr capability.
 	ctx := &xattrFakeCtx{stat: xattrFakeStat{}, vfs: nil}
-	g, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "user.x"})
+	g, _ := getXattr(ctx, &nfs.GETXATTR4args{Name: "x"})
 	if g.Status != nfs.NFS4ERR_NOTSUPP {
 		t.Fatalf("expected NOTSUPP, got %d", g.Status)
 	}
