@@ -48,6 +48,9 @@ func setAttr(x nfs.RPCContext, args *nfs.SETATTR4args) (*nfs.SETATTR4res, error)
 	// pathName := cwd
 
 	of := x.Stat().GetOpenedFile(seqId)
+	if of == nil && args.StateId != nil && args.StateId.Other[0] != 0 {
+		of = x.Stat().GetOpenedFile(args.StateId.Other[0])
+	}
 
 	if of != nil {
 		f = of.File()

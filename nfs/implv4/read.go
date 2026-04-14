@@ -22,6 +22,9 @@ func read(x nfs.RPCContext, args *nfs.READ4args) (*nfs.READ4res, error) {
 	}
 
 	of := x.Stat().GetOpenedFile(seqId)
+	if of == nil && args != nil && args.StateId != nil && args.StateId.Other[0] != 0 {
+		of = x.Stat().GetOpenedFile(args.StateId.Other[0])
+	}
 	if of == nil {
 		return &nfs.READ4res{Status: nfs.NFS4ERR_INVAL}, nil
 	}

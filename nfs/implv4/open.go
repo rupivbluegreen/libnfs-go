@@ -312,7 +312,10 @@ func open(x nfs.RPCContext, args *nfs.OPEN4args) (*nfs.ResGenericRaw, error) {
 		Ok: &nfs.OPEN4resok{
 			StateId: &nfs.StateId4{
 				SeqId: seqId,
-				Other: [3]uint32{0, 0, 0},
+				// Stash the open-file counter in Other[0] so v4.1+ clients
+				// (which may increment SeqId per operation) can still locate
+				// the open via the stable identifier.
+				Other: [3]uint32{seqId, 0, 0},
 			},
 			CInfo:   &nfs.ChangeInfo4{},
 			Rflags:  uint32(0), // OPEN4_RESULT_*

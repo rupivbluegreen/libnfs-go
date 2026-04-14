@@ -20,10 +20,19 @@ func write(x nfs.RPCContext, args *nfs.WRITE4args) (*nfs.WRITE4res, error) {
 	seqId := uint32(0)
 	if args != nil && args.StateId != nil {
 		seqId = args.StateId.SeqId
+		log.Debugf("write: stateid seq=%d other=%v offset=%d datalen=%d",
+			args.StateId.SeqId, args.StateId.Other, args.Offset, len(args.Data))
 	}
 
 	of := x.Stat().GetOpenedFile(seqId)
+	if of == nil && args != nil && args.StateId != nil && args.StateId.Other[0] != 0 {
+		// v4.1 kernels often increment seqid per-op; fall back to lookup by
+		// the stable Other[0] field which we use as the unique state token.
+		of = x.Stat().GetOpenedFile(args.StateId.Other[0])
+	}
 	if of == nil {
+		log.Warnf("write: no opened file for stateid seq=%d other=%v",
+			args.StateId.SeqId, args.StateId.Other)
 		return &nfs.WRITE4res{Status: nfs.NFS4ERR_INVAL}, nil
 	}
 
