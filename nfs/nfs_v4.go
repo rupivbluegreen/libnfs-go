@@ -80,6 +80,10 @@ const (
 	NFS4ERR_SEQ_MISORDERED      = uint32(10063) /* sequence id out of order */
 	NFS4ERR_OP_NOT_IN_SESSION   = uint32(10071) /* op needs SEQUENCE first  */
 	NFS4ERR_SEQUENCE_POS        = uint32(10080) /* SEQUENCE not first op    */
+
+	// rfc8276 xattrs
+	NFS4ERR_NOXATTR   = uint32(10095) /* xattr does not exist     */
+	NFS4ERR_XATTR2BIG = uint32(10096) /* xattr value too large    */
 )
 
 func NFS4err(err error) uint32 {
@@ -165,7 +169,42 @@ const (
 	OP4_SEQUENCE            = uint32(53) // nfs-v4.1, rfc5661
 	OP4_DESTROY_CLIENTID    = uint32(57) // nfs-v4.1, rfc5661
 	OP4_RECLAIM_COMPLETE    = uint32(58) // nfs-v4.1, rfc5661
-	OP4_ILLEGAL             = uint32(10044)
+
+	// nfs-v4.2, rfc7862
+	OP4_ALLOCATE       = uint32(59)
+	OP4_COPY           = uint32(60)
+	OP4_COPY_NOTIFY    = uint32(61)
+	OP4_DEALLOCATE     = uint32(62)
+	OP4_IO_ADVISE      = uint32(63)
+	OP4_LAYOUTERROR    = uint32(64)
+	OP4_LAYOUTSTATS    = uint32(65)
+	OP4_OFFLOAD_CANCEL = uint32(66)
+	OP4_OFFLOAD_STATUS = uint32(67)
+	OP4_READ_PLUS      = uint32(68)
+	OP4_SEEK           = uint32(69)
+	OP4_WRITE_SAME     = uint32(70)
+	OP4_CLONE          = uint32(71)
+
+	// rfc8276 xattrs (also v4.2)
+	OP4_GETXATTR    = uint32(72)
+	OP4_SETXATTR    = uint32(73)
+	OP4_LISTXATTRS  = uint32(74)
+	OP4_REMOVEXATTR = uint32(75)
+
+	OP4_ILLEGAL = uint32(10044)
+)
+
+// SEEK4args.What (RFC 7862 §15.11)
+const (
+	NFS4_CONTENT_DATA = uint32(0)
+	NFS4_CONTENT_HOLE = uint32(1)
+)
+
+// SETXATTR4args.Option (RFC 8276)
+const (
+	SETXATTR4_EITHER  = uint32(0)
+	SETXATTR4_CREATE  = uint32(1)
+	SETXATTR4_REPLACE = uint32(2)
 )
 
 const (
@@ -259,6 +298,58 @@ func Proc4Name(proc uint32) string {
 		return "write"
 	case OP4_RELEASE_LOCKOWNER:
 		return "release_lockowner"
+	// nfs-v4.1
+	case OP4_EXCHANGE_ID:
+		return "exchange_id"
+	case OP4_CREATE_SESSION:
+		return "create_session"
+	case OP4_DESTROY_SESSION:
+		return "destroy_session"
+	case OP4_FREE_STATEID:
+		return "free_stateid"
+	case OP4_SECINFO_NO_NAME:
+		return "secinfo_no_name"
+	case OP4_SEQUENCE:
+		return "sequence"
+	case OP4_DESTROY_CLIENTID:
+		return "destroy_clientid"
+	case OP4_RECLAIM_COMPLETE:
+		return "reclaim_complete"
+	// nfs-v4.2
+	case OP4_ALLOCATE:
+		return "allocate"
+	case OP4_COPY:
+		return "copy"
+	case OP4_COPY_NOTIFY:
+		return "copy_notify"
+	case OP4_DEALLOCATE:
+		return "deallocate"
+	case OP4_IO_ADVISE:
+		return "io_advise"
+	case OP4_LAYOUTERROR:
+		return "layouterror"
+	case OP4_LAYOUTSTATS:
+		return "layoutstats"
+	case OP4_OFFLOAD_CANCEL:
+		return "offload_cancel"
+	case OP4_OFFLOAD_STATUS:
+		return "offload_status"
+	case OP4_READ_PLUS:
+		return "read_plus"
+	case OP4_SEEK:
+		return "seek"
+	case OP4_WRITE_SAME:
+		return "write_same"
+	case OP4_CLONE:
+		return "clone"
+	case OP4_GETXATTR:
+		return "getxattr"
+	case OP4_SETXATTR:
+		return "setxattr"
+	case OP4_LISTXATTRS:
+		return "listxattrs"
+	case OP4_REMOVEXATTR:
+		return "removexattr"
 	case OP4_ILLEGAL:
 		return "illegal"
 	}
@@ -1016,4 +1107,125 @@ type READLINK4resok struct {
 type READLINK4res struct {
 	Status uint32
 	Ok     *READLINK4resok
+}
+
+// ---------- nfs-v4.2 (rfc7862) ----------
+
+// SEEK (§15.11)
+
+type SEEK4args struct {
+	StateId StateId4
+	Offset  uint64
+	What    uint32
+}
+
+type SEEK4resok struct {
+	Eof    bool
+	Offset uint64
+}
+
+type SEEK4res struct {
+	Status uint32
+	Ok     *SEEK4resok
+}
+
+// COPY (§15.2). We implement synchronous, intra-server copy only. The
+// source-servers list must be empty on the wire; see XdrUnmarshal in
+// nfs/nfs_v4_xdr.go for the enforcement.
+
+type WriteResponse4 struct {
+	Callback  []StateId4 // empty for sync copy
+	Count     uint64
+	Committed uint32
+	Verifier  [8]byte
+}
+
+type COPY4args struct {
+	SrcStateId  StateId4
+	DstStateId  StateId4
+	SrcOffset   uint64
+	DstOffset   uint64
+	Count       uint64
+	Consecutive bool
+	Synchronous bool
+	SrcServers  Netloc4List // must be empty on decode
+}
+
+type COPY4resok struct {
+	Response    WriteResponse4
+	Consecutive bool
+	Synchronous bool
+}
+
+type COPY4res struct {
+	Status uint32
+	Ok     *COPY4resok
+}
+
+// Netloc4List is the marker type for the "source servers" field of
+// COPY4args. A custom XdrUnmarshal rejects non-empty lists so the
+// reflection-based decoder doesn't try to walk the discriminated
+// netloc4 union (which we don't implement).
+type Netloc4List struct{}
+
+// ALLOCATE / DEALLOCATE (§15.4 / §15.5). Decoded only so the reader
+// stays aligned on the NFS4ERR_NOTSUPP fallback path.
+
+type ALLOCATE4args struct {
+	StateId StateId4
+	Offset  uint64
+	Length  uint64
+}
+
+type DEALLOCATE4args = ALLOCATE4args
+
+// ---------- rfc8276 xattrs ----------
+
+type GETXATTR4args struct {
+	Name string
+}
+
+type GETXATTR4resok struct {
+	Value []byte
+}
+
+type GETXATTR4res struct {
+	Status uint32
+	Ok     *GETXATTR4resok
+}
+
+type SETXATTR4args struct {
+	Option uint32
+	Name   string
+	Value  []byte
+}
+
+type SETXATTR4res struct {
+	Status uint32
+	Info   *ChangeInfo4
+}
+
+type LISTXATTRS4args struct {
+	Cookie   uint64
+	MaxCount uint32
+}
+
+type LISTXATTRS4resok struct {
+	Cookie uint64
+	Names  []string
+	Eof    bool
+}
+
+type LISTXATTRS4res struct {
+	Status uint32
+	Ok     *LISTXATTRS4resok
+}
+
+type REMOVEXATTR4args struct {
+	Name string
+}
+
+type REMOVEXATTR4res struct {
+	Status uint32
+	Info   *ChangeInfo4
 }

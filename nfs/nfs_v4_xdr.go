@@ -63,6 +63,29 @@ func (c *CallbackSecParams4) XdrUnmarshal(r *xdr.Reader) (int, error) {
 	}
 }
 
+// XdrMarshal emits a zero-length netloc4<> list on the wire. Round-
+// trips with XdrUnmarshal below; also the only value our COPY handler
+// ever produces (we never advertise other servers).
+func (n *Netloc4List) XdrMarshal(w *xdr.Writer) (int, error) {
+	return w.WriteUint32(0)
+}
+
+// XdrUnmarshal decodes the "source servers" list of COPY4args. We only
+// implement synchronous intra-server copy (RFC 7862 §15.2.3), so any
+// non-empty netloc4<> list is rejected outright — we don't implement
+// the netloc4 discriminated union, and accepting one would desync the
+// wire.
+func (n *Netloc4List) XdrUnmarshal(r *xdr.Reader) (int, error) {
+	count, err := r.ReadUint32()
+	if err != nil {
+		return 0, err
+	}
+	if count != 0 {
+		return 4, fmt.Errorf("COPY4args: non-empty source-servers list (%d) not supported", count)
+	}
+	return 4, nil
+}
+
 // XdrUnmarshal decodes state_protect4_r. Only used if a client calls
 // EXCHANGE_ID on us in a direction we support decoding (uncommon — servers
 // typically only emit this), but included for symmetry.

@@ -27,6 +27,14 @@ func (w *Writer) Write(data []byte) (int, error) {
 	}
 }
 
+// Marshaler allows types to implement custom XDR encoding, mirroring
+// the Unmarshaler interface on xdr.Reader. Required for types whose
+// wire format cannot be expressed by reflection alone (e.g. the
+// empty-only netloc4<> field of COPY4args).
+type Marshaler interface {
+	XdrMarshal(w *Writer) (int, error)
+}
+
 func (w *Writer) WriteAny(any interface{}) (int, error) {
 	return w.WriteValue(reflect.ValueOf(any))
 }
@@ -34,6 +42,17 @@ func (w *Writer) WriteAny(any interface{}) (int, error) {
 func (w *Writer) WriteValue(v reflect.Value) (int, error) {
 	if !v.IsValid() {
 		return 0, nil
+	}
+
+	if v.CanInterface() {
+		if m, ok := v.Interface().(Marshaler); ok {
+			return m.XdrMarshal(w)
+		}
+		if v.CanAddr() {
+			if m, ok := v.Addr().Interface().(Marshaler); ok {
+				return m.XdrMarshal(w)
+			}
+		}
 	}
 
 	vtyp := v.Type()
